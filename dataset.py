@@ -1,6 +1,26 @@
 import torch 
 import numpy as np 
 import os 
+import tiktoken
+
+def process_text(filename): 
+    with open(filename, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    lines1 = [line.strip().replace('MORTY: ', '') for line in lines if line.startswith('MORTY:')]
+    lines2 = [line.strip().replace('Morty: ', '') for line in lines if line.startswith('Morty:')]
+    data = "".join(lines1 + lines2)
+
+    # encode with tiktoken gpt2 bpe
+    enc = tiktoken.get_encoding("gpt2")
+    tokens = enc.encode_ordinary(data)
+    tokens_np = np.array(tokens)
+    assert (0 <= tokens_np).all() and (tokens_np < 2**16).all(), "token dictionary too large for uint16"
+    tokens_np_uint16 = tokens_np.astype(np.uint16)
+    print(f"data has {len(tokens_np_uint16):,} tokens")
+
+    result_filename = os.path.splitext(filename)[0] + ".npy"
+    print(f"save tokens to {result_filename}")
+    np.save(result_filename, tokens_np_uint16)
 
 def load_tokens(filename): 
     npt = np.load(filename)
@@ -19,23 +39,16 @@ class DataLoaderLite:
         self.batch_size = batch_size 
         self.sequence_len = sequence_len 
         assert split in ["train", "val"]
-
-        # get the shard filenames
-        shards = os.listdir(data_root)
-        shards = [s for s in shards if split in s]
-        shards = sorted(shards)
-        shards = [os.path.join(data_root, s) for s in shards]
-        self.shards = shards 
         
-        assert len(shards) > 0, f"no shards for split {split}"
-        print(f"found {len(shards)} shards for split {split}")
+        data_dir = os.path.join(data_root, split)
+        filename = data_dir + ".npy"
+        if not os.path.exists(filename):
+            process_text(data_dir + ".txt")
 
+        self.tokens = load_tokens(filename)
         self.reset()
 
-    def reset(self): 
-        # init at shard zero
-        self.current_shard = 0 
-        self.tokens = load_tokens(self.shards[self.current_shard])
+    def reset(self):
         self.current_position = 0
 
     def next_batch(self): 
@@ -54,8 +67,6 @@ class DataLoaderLite:
         self.current_position += batch_size * sequence_len 
         # if loading the next batch would be out of bounds, advance to next shard
         if self.current_position + (batch_size * sequence_len + 1) > len(self.tokens): 
-            self.current_shard = (self.current_shard + 1) % len(self.shards)
-            self.tokens = load_tokens(self.shards[self.current_shard])
             self.current_position = 0 
 
         return x, y 

@@ -12,12 +12,14 @@ class GPT2Config:
 
 @dataclass 
 class TrainConfig: 
-    batch_size: int = 8 
-    sequence_len: int = 512 
-    max_lr: float = 6e-4 
-    min_lr: float = 6e-5 
-    warmup_steps: float = 715 
-    # if data is 10B tokens and batch size 0.5M tokens, 
-    # 19,073 steps is ~1 epoch
-    max_steps: float = 19073 
-    val_loss_steps: int = 20 
+    batch_size: int = 1
+    total_batch_size: int = 4096
+    sequence_len: int = 1024 
+    max_lr: float = 1e-7
+    min_lr: float = 1e-8 
+    warmup_steps: float = 5 
+    max_steps: float = 100
+    val_loss_steps: int = 5 
+    log_dir: str = "log"
+    save_model_interval: int = 20
+    get_eval_interval: int = 10 

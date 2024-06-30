@@ -3,19 +3,12 @@ import math
 import os 
 import time 
 
+# torch._dynamo.config.suppress_errors = True
+
 from config import TrainConfig, GPT2Config 
 from dataset import DataLoaderLite 
 from model import GPT2 
-
-def choose_device(): 
-    device = "cpu"
-    if torch.cuda.is_available(): 
-        device = "cuda"
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available(): 
-        device = "mps"
-    device_type = "cuda" if device.startswith("cuda") else "cpu"
-    print(f"using device: {device} with type {device_type}")
-    return device, device_type
+from utils import choose_device 
 
 def get_learning_rate(config, iteration): 
     max_lr = config.max_lr 
@@ -45,10 +38,8 @@ def train():
     if torch.cuda.is_available(): 
         torch.cuda.manual_seed(2501)
 
-    # 2**19, ~0.5M, in number of tokens
-    total_batch_size = 524288
-
     train_config = TrainConfig()
+    total_batch_size = train_config.total_batch_size
     batch_size = train_config.batch_size 
     sequence_len = train_config.sequence_len 
     assert total_batch_size % (batch_size * sequence_len) == 0
@@ -57,20 +48,19 @@ def train():
     print(f"total desired batch size: {total_batch_size}")
     print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
 
-    train_loader = DataLoaderLite(batch_size=batch_size, sequence_len=sequence_len, split="train")
-    val_loader = DataLoaderLite(batch_size=batch_size, sequence_len=sequence_len, split="val")
+    train_loader = DataLoaderLite(data_root="./data", batch_size=batch_size, sequence_len=sequence_len, split="train")
+    val_loader = DataLoaderLite(data_root="./data", batch_size=batch_size, sequence_len=sequence_len, split="val")
 
     torch.set_float32_matmul_precision('high')
 
-    gpt2_config = GPT2Config(vocab_size=50304)
-    model = GPT2(gpt2_config)
+    model = GPT2.from_pretrained("gpt2")
     model.to(device)
-    model = torch.compile(model)
+    # model = torch.compile(model)
 
     optimizer = model.configure_optimizers(weight_decay=.1, learning_rate=train_config.max_lr, device_type=device_type)
 
     # create the log directory we will write checkpoints to and log to
-    log_dir = "log"
+    log_dir = train_config.log_dir 
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"log.txt")
     # open for writing to clear the file
@@ -120,7 +110,8 @@ def train():
 
         # once in a while evaluate our validation loss and save model 
         last_step = (step == train_config.max_steps - 1)
-        if step % 250 == 0 or last_step: 
+        
+        if step % train_config.get_eval_interval == 0 or last_step: 
             model.eval()
             val_loader.reset()
             with torch.no_grad(): 
@@ -136,15 +127,16 @@ def train():
             print(f"validation loss: {val_loss_accum.item():.4f}")
             with open(log_file, "a") as f: 
                 f.write(f"{step} val {val_loss_accum.item():.4f}\n")
-            if step > 0 and (step % 5000 == 0 or last_step): 
-                checkpoint_path = os.path.join(log_dir, f"model_{step:05d}.pt")
-                checkpoint = {
-                    "model": model.state_dict(), 
-                    "config": model.config, 
-                    "step": step, 
-                    "val_loss": val_loss_accum.item(), 
-                }
-                torch.save(checkpoint, checkpoint_path)
+
+        if step % train_config.save_model_interval == 0 or last_step: 
+            checkpoint_path = os.path.join(log_dir, f"model_{step:05d}.pt")
+            checkpoint = {
+                "model": model.state_dict(), 
+                "config": model.config, 
+                "step": step, 
+                "val_loss": val_loss_accum.item(), 
+            }
+            torch.save(checkpoint, checkpoint_path)
 
 
 if __name__ == "__main__": 
