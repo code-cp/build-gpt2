@@ -32,7 +32,7 @@ def infer():
     max_length = 32
 
     enc = tiktoken.get_encoding("gpt2")
-    tokens = enc.encode("Hi Rick, ")
+    tokens = enc.encode("Hi Rick,")
     tokens = torch.tensor(tokens, dtype=torch.long)
     tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
     xgen = tokens.to(device)

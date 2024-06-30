@@ -3,12 +3,29 @@ import numpy as np
 import os 
 import tiktoken
 
+from datasets import load_dataset
+
+def process_raw_data(data_dir, character_name): 
+    ds = load_dataset("Prarabdha/Rick_and_Morty_Transcript")
+    data = [row['dialouge'].strip().replace(': ', '') for row in ds['train'] if row['speaker'] == character_name]
+
+    ratio = 0.9 
+    total_len = len(data)
+    split_idx = int(total_len * ratio)
+    train_data = data[:split_idx]
+    val_data = data[split_idx:]
+    
+    filename = os.path.join(data_dir, "train.txt")
+    with open(filename, "w") as file: 
+        file.writelines(train_data) 
+
+    filename = os.path.join(data_dir, "val.txt")
+    with open(filename, "w") as file: 
+        file.writelines(val_data) 
+
 def process_text(filename): 
     with open(filename, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    lines1 = [line.strip().replace('MORTY: ', '') for line in lines if line.startswith('MORTY:')]
-    lines2 = [line.strip().replace('Morty: ', '') for line in lines if line.startswith('Morty:')]
-    data = "".join(lines1 + lines2)
+        data = f.read()
 
     # encode with tiktoken gpt2 bpe
     enc = tiktoken.get_encoding("gpt2")
@@ -70,3 +87,8 @@ class DataLoaderLite:
             self.current_position = 0 
 
         return x, y 
+
+if __name__ == "__main__": 
+    data_dir = "./data"
+    character_name = "Morty"
+    process_raw_data(data_dir, character_name)

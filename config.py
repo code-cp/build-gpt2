@@ -15,10 +15,11 @@ class TrainConfig:
     batch_size: int = 1
     total_batch_size: int = 4096
     sequence_len: int = 1024 
-    max_lr: float = 1e-7
-    min_lr: float = 1e-8 
+    max_lr: float = 5e-5
+    min_lr: float = 5e-6 
     warmup_steps: float = 5 
-    max_steps: float = 100
+    # max_steps: float = 100
+    max_steps: float = 50
     val_loss_steps: int = 5 
     log_dir: str = "log"
     save_model_interval: int = 20
